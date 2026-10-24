@@ -1,0 +1,44 @@
+{
+  "name": "booknest",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma migrate deploy && next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "tsx --test tests/catalog.test.ts tests/library.integration.test.ts tests/payos.test.ts tests/reading-access.test.ts tests/rental-pricing.test.ts",
+    "test:integration:local": "tsx scripts/test-integration-local.ts",
+    "worker:library": "tsx scripts/library-worker.ts",
+    "db:seed": "tsx prisma/seed.ts",
+    "postinstall": "prisma generate"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.6.1",
+    "@hookform/resolvers": "^5.9.1",
+    "@payos/node": "^2.0.5",
+    "@prisma/client": "^6.19.3",
+    "antd": "^5.29.3",
+    "bcryptjs": "^3.0.3",
+    "jose": "^6.2.12",
+    "next": "^15.5.25",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-hook-form": "^7.87.0",
+    "zod": "^4.6.2",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^16.3.4",
+    "prisma": "^6.19.3",
+    "tsx": "^4.23.13",
+    "typescript": "^5"
+  }
+}
