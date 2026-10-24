@@ -1,0 +1,391 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  LIBRARIAN
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  LOCKED
+}
+
+enum RentalStatus {
+  PENDING
+  ACTIVE
+  RETURNED
+  CANCELLED
+  EXPIRED
+}
+
+enum RentalMode {
+  ONLINE
+  OFFLINE
+}
+
+enum OrderStatus {
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentMethod {
+  CASH
+  SIMULATED
+  PAYOS
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+}
+
+enum CopyStatus {
+  AVAILABLE
+  ON_LOAN
+  RESERVED
+  DAMAGED
+  LOST
+  MAINTENANCE
+  DISPOSED
+}
+
+enum ReservationStatus {
+  WAITING
+  READY
+  FULFILLED
+  CANCELLED
+  EXPIRED
+}
+
+enum InventoryMovementType {
+  INTAKE
+  ADJUSTMENT
+  LOAN
+  RETURN
+  RESERVED
+  RESERVATION_RELEASE
+  DAMAGED
+  LOST
+  REPAIRED
+  DISPOSED
+  BOOK_SALE
+  SALE_RETURN
+}
+
+enum NotificationType {
+  RESERVATION_READY
+  DUE_SOON
+  OVERDUE
+}
+
+enum SecurityAlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model User {
+  id                  String              @id @default(cuid())
+  name                String
+  email               String              @unique
+  phone               String              @default("")
+  avatarUrl           String?
+  coverUrl            String?
+  passwordHash        String
+  role                Role                @default(USER)
+  status              AccountStatus       @default(ACTIVE)
+  failedLoginAttempts Int                 @default(0)
+  tokenVersion        Int                 @default(0)
+  loginSessions       LoginSession[]
+  rentals             Rental[]
+  loanRequests        LoanRequest[]
+  reservations        Reservation[]
+  orders              Order[]
+  auditLogs           AuditLog[]
+  loginAttempts       LoginAttempt[]
+  inventoryMovements  InventoryMovement[]
+  notifications       Notification[]
+  securityAlerts      SecurityAlert[]
+  readingProfile      ReadingProfile?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+}
+
+model Category {
+  id    String @id @default(cuid())
+  name  String @unique
+  slug  String @unique
+  books Book[]
+}
+
+model Book {
+  id                 String              @id @default(cuid())
+  title              String
+  slug               String              @unique
+  author             String
+  description        String
+  readerContent      String?             @db.Text
+  hasDigitalContent  Boolean             @default(false)
+  coverUrl           String?
+  featured           Boolean             @default(false)
+  pricePerDay        Int
+  stock              Int                 @default(0)
+  available          Int                 @default(0)
+  salePrice          Int                 @default(0)
+  saleStock          Int                 @default(0)
+  categoryId         String
+  category           Category            @relation(fields: [categoryId], references: [id])
+  rentals            Rental[]
+  orderItems         OrderItem[]
+  copies             BookCopy[]
+  reservations       Reservation[]
+  inventoryMovements InventoryMovement[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model Rental {
+  id                 String       @id @default(cuid())
+  userId             String
+  bookId             String
+  rentalMode         RentalMode   @default(OFFLINE)
+  startDate          DateTime
+  dueDate            DateTime
+  returnedAt         DateTime?
+  days               Int
+  total              Int
+  amountPaid         Int          @default(0)
+  refundableDeposit  Int          @default(0)
+  refundedAmount     Int          @default(0)
+  paidAt             DateTime?
+  refundedAt         DateTime?
+  depositForfeitedAt DateTime?
+  extendedCount      Int          @default(0)
+  loanRequestId      String?
+  copyId             String?
+  status             RentalStatus @default(PENDING)
+  user               User         @relation(fields: [userId], references: [id])
+  book               Book         @relation(fields: [bookId], references: [id])
+  loanRequest        LoanRequest? @relation(fields: [loanRequestId], references: [id], onDelete: SetNull)
+  copy               BookCopy?    @relation(fields: [copyId], references: [id], onDelete: Restrict)
+  fine               Fine?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([userId, status])
+  @@index([bookId, dueDate])
+  @@index([loanRequestId])
+  @@index([copyId, status])
+}
+
+model BookCopy {
+  id           String              @id @default(cuid())
+  bookId       String
+  barcode      String              @unique
+  status       CopyStatus          @default(AVAILABLE)
+  condition    String              @default("GOOD")
+  notes        String?
+  acquiredAt   DateTime            @default(now())
+  book         Book                @relation(fields: [bookId], references: [id], onDelete: Restrict)
+  rentals      Rental[]
+  reservations Reservation[]
+  movements    InventoryMovement[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([bookId, status])
+}
+
+model InventoryMovement {
+  id        String                @id @default(cuid())
+  bookId    String
+  copyId    String?
+  actorId   String?
+  type      InventoryMovementType
+  quantity  Int
+  notes     String?
+  metadata  Json?
+  book      Book                  @relation(fields: [bookId], references: [id], onDelete: Restrict)
+  copy      BookCopy?             @relation(fields: [copyId], references: [id], onDelete: SetNull)
+  actor     User?                 @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt DateTime              @default(now())
+
+  @@index([bookId, createdAt])
+  @@index([copyId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model Reservation {
+  id         String            @id @default(cuid())
+  userId     String
+  bookId     String
+  copyId     String?
+  status     ReservationStatus @default(WAITING)
+  readyUntil DateTime?
+  user       User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  book       Book              @relation(fields: [bookId], references: [id], onDelete: Restrict)
+  copy       BookCopy?         @relation(fields: [copyId], references: [id], onDelete: SetNull)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([bookId, status, createdAt])
+  @@index([userId, status, createdAt])
+  @@index([copyId, status])
+}
+
+model ReadingProfile {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  monthlyReadingGoal  Int      @default(4)
+  preferredCategories String[] @default([])
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt           DateTime @updatedAt
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String
+  type        NotificationType
+  title       String
+  message     String
+  referenceId String?
+  readAt      DateTime?
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+
+  @@unique([userId, type, referenceId])
+  @@index([userId, readAt, createdAt])
+}
+
+model SecurityAlert {
+  id          String              @id @default(cuid())
+  dedupeKey   String              @unique
+  type        String
+  severity    String              @default("MEDIUM")
+  status      SecurityAlertStatus @default(OPEN)
+  description String
+  metadata    Json?
+  userId      String?
+  user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([status, createdAt])
+  @@index([type, createdAt])
+}
+
+model LoanRequest {
+  id             String   @id @default(cuid())
+  userId         String
+  idempotencyKey String
+  requestHash    String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  rentals        Rental[]
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, idempotencyKey])
+  @@index([createdAt])
+}
+
+model Order {
+  id               String        @id @default(cuid())
+  userId           String
+  status           OrderStatus   @default(CONFIRMED)
+  paymentMethod    PaymentMethod
+  paymentStatus    PaymentStatus @default(PENDING)
+  total            Int
+  paymentOrderCode Int?          @unique
+  paymentLinkId    String?       @unique
+  checkoutUrl      String?
+  paymentExpiresAt DateTime?
+  paymentReference String?
+  paidAt           DateTime?
+  idempotencyKey   String?       @unique
+  requestHash      String?
+  user             User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items            OrderItem[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, paymentStatus])
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  bookId    String
+  title     String
+  unitPrice Int
+  quantity  Int
+  subtotal  Int
+  order     Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  book      Book   @relation(fields: [bookId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, bookId])
+  @@index([bookId])
+}
+
+model Fine {
+  id        String    @id @default(cuid())
+  rentalId  String    @unique
+  amount    Int
+  reason    String
+  paidAt    DateTime?
+  rental    Rental    @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@index([paidAt, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([entity, entityId])
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  userId    String?
+  email     String
+  ipAddress String
+  success   Boolean
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([email, success, createdAt])
+  @@index([ipAddress, success, createdAt])
+}
+
+model LoginSession {
+  id         String    @id @default(cuid())
+  userId     String
+  userAgent  String?
+  ipAddress  String?
+  expiresAt  DateTime
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([expiresAt])
+}
